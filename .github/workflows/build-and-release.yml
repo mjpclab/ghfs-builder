@@ -1,0 +1,49 @@
+name: Build and Release go-http-file-server
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch, tag or commit to build from'
+        required: true
+        default: 'main'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          repository: mjpclab/go-http-file-server
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version 
+        run: |
+          source build/build.inc.version.sh
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build
+        run: bash build/build-all.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: "go-http-file-server v${{ steps.get_version.outputs.version }}"
+          body: |
+            - Source repo: https://github.com/mjpclab/go-http-file-server
+            - Source branch: `${{ github.event.inputs.branch }}`
+          files: output/*
+          generate_release_notes: false
+          make_latest: true
