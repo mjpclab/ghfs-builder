@@ -1,0 +1,60 @@
+name: Build and Release go-http-file-server
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch, tag or commit to build from'
+        required: true
+        default: 'main'
+      make_latest:
+        description: 'Mark as latest release'
+        type: boolean
+        default: true
+
+env:
+  SOURCE_REPO: mjpclab/go-http-file-server
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          source build/build.inc.version.sh
+          VERSION="${VERSION:-${{ github.event.inputs.branch }}}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+          cache: false
+
+      - name: Build
+        run: bash build/build-all.sh
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION="v${{ steps.get_version.outputs.version }}"
+          NOTES="* Source repo: ${SOURCE_REPO}"$'\n'"* Source branch: \`${{ github.event.inputs.branch }}\`"
+          gh release delete "${VERSION}" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "${VERSION}" output/* \
+            --title "go-http-file-server ${VERSION}" \
+            --notes "${NOTES}" \
+            --target ${{ github.ref_name }} \
+            ${{ github.event.inputs.make_latest == 'true' && '--latest' || '--latest=false' }}
