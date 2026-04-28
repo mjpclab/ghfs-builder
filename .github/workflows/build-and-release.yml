@@ -37,10 +37,20 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version: 'stable'
           cache: false
+
+      - name: Cache Go build
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-gobuild-${{ steps.setup-go.outputs.go-version }}-${{ github.event.inputs.branch }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-${{ steps.setup-go.outputs.go-version }}-${{ github.event.inputs.branch }}-
+            ${{ runner.os }}-gobuild-${{ steps.setup-go.outputs.go-version }}-
 
       - name: Build
         run: bash build/build-all.sh
