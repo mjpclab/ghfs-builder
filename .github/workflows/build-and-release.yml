@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch, tag or commit to build from'
+        description: Branch, tag or commit to build from
         required: true
-        default: 'main'
+        default: main
       make_latest:
-        description: 'Mark as latest release'
+        description: Mark as latest release
         type: boolean
         default: true
 
@@ -23,8 +23,9 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: ${{ env.SOURCE_REPO }}
           ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
@@ -40,7 +41,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v6
         with:
-          go-version: 'stable'
+          go-version: stable
           cache: false
 
       - name: Cache Go build
