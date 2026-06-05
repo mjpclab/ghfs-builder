@@ -7,10 +7,6 @@ on:
         description: Branch, tag or commit to build from
         required: true
         default: main
-      make_latest:
-        description: Mark as latest release
-        type: boolean
-        default: true
 
 env:
   SOURCE_REPO: mjpclab/go-http-file-server
@@ -68,4 +64,4 @@ jobs:
             --title "go-http-file-server ${VERSION}" \
             --notes "${NOTES}" \
             --target ${{ github.ref_name }} \
-            ${{ github.event.inputs.make_latest == 'true' && '--latest' || '--latest=false' }}
+            --prerelease
