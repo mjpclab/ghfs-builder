@@ -26,13 +26,6 @@ jobs:
           ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
 
-      - name: Get version
-        id: get_version
-        run: |
-          source build/build.inc.version.sh
-          VERSION="${VERSION:-${{ github.event.inputs.branch }}}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -49,8 +42,64 @@ jobs:
             ${{ runner.os }}-gobuild-${{ steps.setup-go.outputs.go-version }}-${{ github.event.inputs.branch }}-
             ${{ runner.os }}-gobuild-${{ steps.setup-go.outputs.go-version }}-
 
+      - name: Get version
+        id: get_version
+        run: |
+          source build/build.inc.version.sh
+          VERSION="${VERSION:-${{ github.event.inputs.branch }}}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Build
         run: bash build/build-all.sh
+
+      - name: Build Linux packages (.deb, .rpm, Arch & apk)
+        env:
+          NFPM_VERSION: latest
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # nfpm turns a binary into .deb/.rpm from one config, no dpkg/rpmbuild
+          # needed. Install it with the Go toolchain already set up above.
+          go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${NFPM_VERSION}"
+          NFPM="$(go env GOPATH)/bin/nfpm"
+
+          # This workflow checks out the *upstream* repo, not this one, so the
+          # packaging config isn't on disk — write it inline. ${PKG_ARCH} and
+          # ${PKG_VERSION} are expanded by nfpm from the environment per-arch.
+          cat > nfpm.yaml <<'EOF'
+          name: ghfs
+          arch: ${PKG_ARCH}
+          version: ${VERSION}
+          version_schema: none
+          maintainer: MJ PC Lab
+          description: Simple command line based HTTP file server to share local file system.
+          homepage: "https://github.com/${{ env.SOURCE_REPO }}"
+          license: MIT
+          section: net
+          priority: optional
+          contents:
+            - src: pkgroot/ghfs
+              dst: /usr/bin/ghfs
+          EOF
+
+          # Extract the linux binary from each per-arch archive and package it.
+          mkdir -p pkgroot
+          for arch in amd64 arm64; do
+            archive="output/ghfs-${VERSION}-linux-${arch}.tar.gz"
+            if [ ! -f "$archive" ]; then
+              echo "::warning::${archive} not found, skipping ${arch} packages"
+              continue
+            fi
+            rm -f pkgroot/ghfs
+            tar -xzf "$archive" -C pkgroot ghfs
+            chmod 0755 pkgroot/ghfs
+            export PKG_ARCH="$arch"
+            "$NFPM" package -f nfpm.yaml -p deb -t output/
+            "$NFPM" package -f nfpm.yaml -p rpm -t output/
+            "$NFPM" package -f nfpm.yaml -p archlinux -t output/
+            "$NFPM" package -f nfpm.yaml -p apk -t output/
+          done
 
       - name: Create GitHub Release
         env:
