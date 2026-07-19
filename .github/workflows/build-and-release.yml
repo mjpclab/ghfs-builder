@@ -54,14 +54,13 @@ jobs:
 
       - name: Build Linux packages (.deb, .rpm, Arch & apk)
         env:
-          NFPM_VERSION: latest
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           set -euo pipefail
 
           # nfpm turns a binary into .deb/.rpm from one config, no dpkg/rpmbuild
           # needed. Install it with the Go toolchain already set up above.
-          go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${NFPM_VERSION}"
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           NFPM="$(go env GOPATH)/bin/nfpm"
 
           # This workflow checks out the *upstream* repo, not this one, so the
@@ -84,17 +83,21 @@ jobs:
           EOF
 
           # Extract the linux binary from each per-arch archive and package it.
+          # Each entry is "<archive-suffix>:<nfpm-arch>" because upstream names
+          # the ARMv7 tarball "linux-arm" (default GOARM=7 when cross-compiled)
+          # while nfpm wants "arm7" -> deb armhf / rpm armv7hl / apk armv7.
           mkdir -p pkgroot
-          for arch in amd64 arm64; do
-            archive="output/ghfs-${VERSION}-linux-${arch}.tar.gz"
+          for entry in amd64:amd64 arm64:arm64 386:386 arm:arm7; do
+            suffix="${entry%%:*}"
+            export PKG_ARCH="${entry##*:}"
+            archive="output/ghfs-${VERSION}-linux-${suffix}.tar.gz"
             if [ ! -f "$archive" ]; then
-              echo "::warning::${archive} not found, skipping ${arch} packages"
+              echo "::warning::${archive} not found, skipping ${suffix} packages"
               continue
             fi
             rm -f pkgroot/ghfs
             tar -xzf "$archive" -C pkgroot ghfs
             chmod 0755 pkgroot/ghfs
-            export PKG_ARCH="$arch"
             "$NFPM" package -f nfpm.yaml -p deb -t output/
             "$NFPM" package -f nfpm.yaml -p rpm -t output/
             "$NFPM" package -f nfpm.yaml -p archlinux -t output/
